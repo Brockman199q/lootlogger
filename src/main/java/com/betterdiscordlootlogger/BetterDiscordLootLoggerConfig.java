@@ -1,3 +1,27 @@
+/*
+ * Copyright (c) 2022, RinZ
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+ * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 package com.betterdiscordlootlogger;
 
 import net.runelite.client.config.Config;
@@ -6,27 +30,20 @@ import net.runelite.client.config.ConfigItem;
 import net.runelite.client.config.ConfigSection;
 import net.runelite.client.config.Keybind;
 
-@ConfigGroup("discorduniquesnotifications")
+@ConfigGroup("betterdiscordlootlogger")
 public interface BetterDiscordLootLoggerConfig extends Config
 {
     @ConfigSection(
-            name = "What to Screenshot",
-            description = "All the options that select what to screenshot",
+            name = "Choose what to send",
+            description = "Choose from the options below which events you would like to send",
             position = 99
     )
-    String whatSection = "what";
-
-//	@ConfigSection(
-//			name = "Other Options",
-//			description = "All the other options",
-//			position = 98
-//	)
-//	String discordSection = "other";
+    String whatToSendSection = "what to send";
 
     @ConfigItem(
             keyName = "sendScreenshot",
-            name = "Send Screenshot",
-            description = "Include a screenshot when levelling up.",
+            name = "Send Screenshot?",
+            description = "Include a screenshot in the discord message?",
             position = 3
     )
     default boolean sendScreenshot()
@@ -35,70 +52,46 @@ public interface BetterDiscordLootLoggerConfig extends Config
     }
 
     @ConfigItem(
-            keyName = "hotkey",
-            name = "Screenshot hotkey",
-            description = "When you press this key a screenshot will be taken",
+            keyName = "keybind",
+            name = "Screenshot Keybind",
+            description = "Add keybind to manually take a screenshot and send a message of your rare drop",
             position = 4
     )
-    default Keybind hotkey()
+    default Keybind keybind()
     {
         return Keybind.NOT_SET;
     }
 
     @ConfigItem(
-            keyName = "rewards",
-            name = "Screenshot Rewards",
-            description = "Configures whether screenshots are taken of clues, barrows, and quest completion",
-            position = 3,
-            section = whatSection
-    )
-    default boolean screenshotRewards()
-    {
-        return true;
-    }
-
-    @ConfigItem(
-            keyName = "levels",
-            name = "Screenshot Levels",
-            description = "Configures whether screenshots are taken of level ups",
-            position = 4,
-            section = whatSection
-    )
-    default boolean screenshotLevels()
-    {
-        return true;
-    }
-
-    @ConfigItem(
             keyName = "pets",
-            name = "Screenshot Pet",
-            description = "Configures whether screenshots are taken of receiving pets",
+            name = "Include Pets",
+            description = "Configures whether new pets will be automatically sent to discord",
             position = 5,
-            section = whatSection
+            section = whatToSendSection
     )
-    default boolean screenshotPet()
+    default boolean includePets()
     {
         return true;
     }
 
     @ConfigItem(
             keyName = "valuableDrop",
-            name = "Screenshot Valuable drops",
-            description = "Configures whether or not screenshots are automatically taken when you receive a valuable drop.",
+            name = "Include Valuable drops",
+            description = "Configures whether valuable drops will be automatically sent to discord.",
             position = 6,
-            section = whatSection
+            section = whatToSendSection
     )
-    default boolean screenshotValuableDrop()
+    default boolean includeValuableDrops()
     {
         return false;
     }
 
     @ConfigItem(
             keyName = "valuableDropThreshold",
-            name = "Valuable Threshold",
-            description = "The minimum value to save screenshots of valuable drops.",
+            name = "Valuable Drop Threshold",
+            description = "The minimum value of drop for it to send a discord message.",
             position = 7,
-            section = whatSection
+            section = whatToSendSection
     )
     default int valuableDropThreshold()
     {
@@ -106,25 +99,13 @@ public interface BetterDiscordLootLoggerConfig extends Config
     }
 
     @ConfigItem(
-            keyName = "collectionLogEntries",
-            name = "Screenshot collection log entries",
-            description = "Take a screenshot when completing an entry in the collection log",
+            keyName = "collectionLogItem",
+            name = "Include collection log items",
+            description = "Configures whether a message will be automatically sent to discord when you obtain a new collection log item.",
             position = 8,
-            section = whatSection
+            section = whatToSendSection
     )
-    default boolean screenshotCollectionLogEntries()
-    {
-        return true;
-    }
-
-    @ConfigItem(
-            keyName = "combatAchievements",
-            name = "Screenshot combat achievements",
-            description = "Take a screenshot when completing a combat achievement task",
-            position = 8,
-            section = whatSection
-    )
-    default boolean screenshotCombatAchievements()
+    default boolean includeCollectionLogItems()
     {
         return true;
     }
@@ -135,16 +116,4 @@ public interface BetterDiscordLootLoggerConfig extends Config
             description = "The webhook used to send messages to Discord."
     )
     String webhook();
-
-//	@ConfigItem(
-//			keyName = "includeUsername",
-//			name = "Include username",
-//			description = "Configures if the discord embed will include your username",
-//			position = 12,
-//			section = discordSection
-//	)
-//	default boolean includeUsername()
-//	{
-//		return true;
-//	}
 }

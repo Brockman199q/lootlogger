@@ -1,9 +1,31 @@
+/*
+ * Copyright (c) 2022, RinZ
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+ * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 package com.betterdiscordlootlogger;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.google.inject.Provides;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
@@ -12,7 +34,6 @@ import net.runelite.api.GameState;
 import net.runelite.api.Varbits;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameStateChanged;
-import net.runelite.api.events.GameTick;
 import net.runelite.api.events.UsernameChanged;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
@@ -30,7 +51,6 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.lang.reflect.Array;
-import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -38,507 +58,242 @@ import static net.runelite.http.api.RuneLiteAPI.GSON;
 
 @Slf4j
 @PluginDescriptor(
-        name = "Better Discord Loot Logger"
+	name = "Better Discord Loot Logger"
 )
 public class BetterDiscordLootLoggerPlugin extends Plugin
 {
-    private static final String COLLECTION_LOG_TEXT = "New item added to your collection log: ";
-    private static final String CHEST_LOOTED_MESSAGE = "You find some treasure in the chest!";
-    private static final Map<Integer, String> CHEST_LOOT_EVENTS = ImmutableMap.of(12127, "The Gauntlet");
-    private static final int GAUNTLET_REGION = 7512;
-    private static final int CORRUPTED_GAUNTLET_REGION = 7768;
+	private static final String COLLECTION_LOG_TEXT = "New item added to your collection log: ";
+	private static final Pattern VALUABLE_DROP_PATTERN = Pattern.compile(".*Valuable drop: ([^<>]+?\\(((?:\\d+,?)+) coins\\))(?:</col>)?");
+	private static final ImmutableList<String> PET_MESSAGES = ImmutableList.of("You have a funny feeling like you're being followed",
+		"You feel something weird sneaking into your backpack",
+		"You have a funny feeling like you would have been followed");
 
-    private static final Pattern NUMBER_PATTERN = Pattern.compile("([0-9]+)");
-    private static final Pattern VALUABLE_DROP_PATTERN = Pattern.compile(".*Valuable drop: ([^<>]+?\\(((?:\\d+,?)+) coins\\))(?:</col>)?");
+	private boolean shouldSendMessage;
 
-    private static final Pattern COMBAT_ACHIEVEMENTS_PATTERN = Pattern.compile("Congratulations, you've completed an? (?<tier>\\w+) combat task: <col=[0-9a-f]+>(?<task>(.+))</col>\\.");
-    private static final ImmutableList<String> PET_MESSAGES = ImmutableList.of("You have a funny feeling like you're being followed",
-            "You feel something weird sneaking into your backpack",
-            "You have a funny feeling like you would have been followed");
+	@Inject
+	private Client client;
 
-    private String clueType;
-    private Integer clueNumber;
+	@Inject
+	private BetterDiscordLootLoggerConfig config;
 
-    enum KillType
-    {
-        BARROWS,
-        COX,
-        COX_CM,
-        TOB,
-        TOB_SM,
-        TOB_HM
-    }
+	@Inject
+	private OkHttpClient okHttpClient;
 
-    private KillType killType;
-    private Integer killCountNumber;
-    private boolean shouldSendMessage = false;
-    private int ticksWaited = 0;
+	@Inject
+	private KeyManager keyManager;
 
-    @Inject
-    private Client client;
+	@Inject
+	private DrawManager drawManager;
 
-    @Inject
-    private BetterDiscordLootLoggerConfig config;
+	private final HotkeyListener hotkeyListener = new HotkeyListener(() -> config.keybind())
+	{
+		@Override
+		public void hotkeyPressed()
+		{
+			sendMessage("", "", "manual");
+		}
+	};
 
-    @Inject
-    private OkHttpClient okHttpClient;
+	@Override
+	protected void startUp() throws Exception
+	{
+		keyManager.registerKeyListener(hotkeyListener);
+	}
 
-    @Inject
-    private KeyManager keyManager;
+	@Override
+	protected void shutDown() throws Exception
+	{
+		keyManager.unregisterKeyListener(hotkeyListener);
+	}
 
-    @Inject
-    private DrawManager drawManager;
+	@Subscribe
+	public void onUsernameChanged(UsernameChanged usernameChanged)
+	{
+		resetState();
+	}
 
-    private final HotkeyListener hotkeyListener = new HotkeyListener(() -> config.hotkey())
-    {
-        @Override
-        public void hotkeyPressed()
-        {
-            sendMessage("", "", "");
-        }
-    };
+	@Subscribe
+	public void onGameStateChanged(GameStateChanged gameStateChanged)
+	{
+		if (gameStateChanged.getGameState().equals(GameState.LOGIN_SCREEN))
+		{
+			resetState();
+		} else {
+			shouldSendMessage = true;
+		}
+	}
 
-    @Override
-    protected void startUp() throws Exception
-    {
-        keyManager.registerKeyListener(hotkeyListener);
-    }
+	@Subscribe
+	public void onChatMessage(ChatMessage event)
+	{
+		if (event.getType() != ChatMessageType.GAMEMESSAGE
+			&& event.getType() != ChatMessageType.SPAM
+			&& event.getType() != ChatMessageType.TRADE
+			&& event.getType() != ChatMessageType.FRIENDSCHATNOTIFICATION)
+		{
+			return;
+		}
 
-    @Override
-    protected void shutDown() throws Exception
-    {
-        keyManager.unregisterKeyListener(hotkeyListener);
-    }
+		String chatMessage = event.getMessage();
 
-    @Subscribe
-    public void onUsernameChanged(UsernameChanged usernameChanged)
-    {
-        resetState();
-    }
+		if (config.includePets() && PET_MESSAGES.stream().anyMatch(chatMessage::contains))
+		{
+			sendMessage("", "", "pet");
+		}
 
-    @Subscribe
-    public void onGameStateChanged(GameStateChanged gameStateChanged)
-    {
-        if (gameStateChanged.getGameState().equals(GameState.LOGIN_SCREEN))
-        {
-            resetState();
-        }
-    }
-
-//    @Subscribe
-//    public void onGameTick(GameTick event)
-//    {
-//        if (!shouldSendMessage)
-//        {
-//            return;
-//        }
-//
-//        if (ticksWaited < 2)
-//        {
-//            ticksWaited++;
-//            return;
-//        }
-//
-//        shouldSendMessage = false;
-//        ticksWaited = 0;
-//        sendMessage("", "");
-//    }
-
-    @Subscribe
-    public void onChatMessage(ChatMessage event)
-    {
-        if (event.getType() != ChatMessageType.GAMEMESSAGE
-                && event.getType() != ChatMessageType.SPAM
-                && event.getType() != ChatMessageType.TRADE
-                && event.getType() != ChatMessageType.FRIENDSCHATNOTIFICATION)
-        {
-            return;
-        }
-
-        String chatMessage = event.getMessage();
-
-//        if (chatMessage.contains("You have completed") && chatMessage.contains("Treasure"))
-//        {
-//            Matcher m = NUMBER_PATTERN.matcher(Text.removeTags(chatMessage));
-//            if (m.find())
-//            {
-//                clueNumber = Integer.valueOf(m.group());
-//                clueType = chatMessage.substring(chatMessage.lastIndexOf(m.group()) + m.group().length() + 1, chatMessage.indexOf("Treasure") - 1);
-//                return;
-//            }
-//        }
-//
-//        if (chatMessage.startsWith("Your Barrows chest count is"))
-//        {
-//            Matcher m = NUMBER_PATTERN.matcher(Text.removeTags(chatMessage));
-//            if (m.find())
-//            {
-//                killType = KillType.BARROWS;
-//                killCountNumber = Integer.valueOf(m.group());
-//                return;
-//            }
-//        }
-//
-//        if (chatMessage.startsWith("Your completed Chambers of Xeric count is:"))
-//        {
-//            Matcher m = NUMBER_PATTERN.matcher(Text.removeTags(chatMessage));
-//            if (m.find())
-//            {
-//                killType = KillType.COX;
-//                killCountNumber = Integer.valueOf(m.group());
-//                return;
-//            }
-//        }
-//
-//        if (chatMessage.startsWith("Your completed Chambers of Xeric Challenge Mode count is:"))
-//        {
-//            Matcher m = NUMBER_PATTERN.matcher(Text.removeTags(chatMessage));
-//            if (m.find())
-//            {
-//                killType = KillType.COX_CM;
-//                killCountNumber = Integer.valueOf(m.group());
-//                return;
-//            }
-//        }
-//
-//        if (chatMessage.startsWith("Your completed Theatre of Blood"))
-//        {
-//            Matcher m = NUMBER_PATTERN.matcher(Text.removeTags(chatMessage));
-//            if (m.find())
-//            {
-//                killType = chatMessage.contains("Hard Mode") ? KillType.TOB_HM : (chatMessage.contains("Story Mode") ? KillType.TOB_SM : KillType.TOB);
-//                killCountNumber = Integer.valueOf(m.group());
-//                return;
-//            }
-//        }
-
-        if (config.screenshotPet() && PET_MESSAGES.stream().anyMatch(chatMessage::contains))
-        {
-            sendMessage("", "", "pet");
-        }
-
-        if (chatMessage.equals(CHEST_LOOTED_MESSAGE) && config.screenshotRewards())
-        {
-            final int regionID = client.getLocalPlayer().getWorldLocation().getRegionID();
-            String eventName = CHEST_LOOT_EVENTS.get(regionID);
-            if (eventName != null)
-            {
-                sendMessage("", "", "chest");
-            }
-        }
-
-        if (config.screenshotValuableDrop())
-        {
-            Matcher m = VALUABLE_DROP_PATTERN.matcher(chatMessage);
-            if (m.matches())
-            {
-                int valuableDropValue = Integer.parseInt(m.group(2).replaceAll(",", ""));
-                if (valuableDropValue >= config.valuableDropThreshold())
-                {
-                    String valuableDrop[] = m.group(1).split(" \\(");
-					String valuableDropName = (String)Array.get(valuableDrop, 0);
+		if (config.includeValuableDrops())
+		{
+			Matcher m = VALUABLE_DROP_PATTERN.matcher(chatMessage);
+			if (m.matches())
+			{
+				int valuableDropValue = Integer.parseInt(m.group(2).replaceAll(",", ""));
+				if (valuableDropValue >= config.valuableDropThreshold())
+				{
+					String[] valuableDrop = m.group(1).split(" \\(");
+					String valuableDropName = (String) Array.get(valuableDrop, 0);
 					String valuableDropValueString = m.group(2);
-                    sendMessage(valuableDropName, valuableDropValueString, "valuable drop");
-                }
-            }
-        }
+					sendMessage(valuableDropName, valuableDropValueString, "valuable drop");
+				}
+			}
+		}
 
-//        FIXME
-//          - Figure out why Varbits.COLLECTION_LOG_NOTIFICATION is throwing an error.
-//          - Same for Varbits.COMBAT_ACHIEVEMENTS_POPUP
-
-        if (config.screenshotCollectionLogEntries() && chatMessage.startsWith(COLLECTION_LOG_TEXT) && (client.getVarbitValue(Varbits.COLLECTION_LOG_NOTIFICATION) == 1 || client.getVarbitValue(Varbits.COLLECTION_LOG_NOTIFICATION) == 3))
-        {
+		if (config.includeCollectionLogItems() && chatMessage.startsWith(COLLECTION_LOG_TEXT) && (client.getVarbitValue(Varbits.COLLECTION_LOG_NOTIFICATION) == 1 || client.getVarbitValue(Varbits.COLLECTION_LOG_NOTIFICATION) == 3))
+		{
 			String entry = Text.removeTags(chatMessage).substring(COLLECTION_LOG_TEXT.length());
-            sendMessage(entry, "", "collection log");
-        }
+			sendMessage(entry, "", "collection log");
+		}
+	}
 
-        if (chatMessage.contains("combat task") && config.screenshotCombatAchievements() && client.getVarbitValue(Varbits.COMBAT_ACHIEVEMENTS_POPUP) == 1)
-        {
-//			String fileName = parseCombatAchievementWidget(chatMessage);
-//			if (!fileName.isEmpty())
-//			{
-            sendMessage("", "", "combat task");
-//			}
-        }
-    }
+	@Provides
+	BetterDiscordLootLoggerConfig provideConfig(ConfigManager configManager)
+	{
+		return configManager.getConfig(BetterDiscordLootLoggerConfig.class);
+	}
 
-//	@Subscribe
-//	public void onWidgetLoaded(WidgetLoaded event)
-//	{
-//		int groupId = event.getGroupId();
-//
-//		switch (groupId)
-//		{
-//			case QUEST_COMPLETED_GROUP_ID:
-//			case CLUE_SCROLL_REWARD_GROUP_ID:
-//			case CHAMBERS_OF_XERIC_REWARD_GROUP_ID:
-//			case THEATRE_OF_BLOOD_REWARD_GROUP_ID:
-//			case BARROWS_REWARD_GROUP_ID:
-//				if (!config.screenshotRewards())
-//				{
-//					return;
-//				}
-//				break;
-//		}
-//
-//		switch (groupId)
-//		{
-//			case CHAMBERS_OF_XERIC_REWARD_GROUP_ID:
-//			{
-//				if (killType == KillType.COX)
-//				{
-//					killType = null;
-//					killCountNumber = 0;
-//					break;
-//				}
-//				else if (killType == KillType.COX_CM)
-//				{
-//					killType = null;
-//					killCountNumber = 0;
-//					break;
-//				}
-//				return;
-//			}
-//			case THEATRE_OF_BLOOD_REWARD_GROUP_ID:
-//			{
-//				if (killType != KillType.TOB && killType != KillType.TOB_SM && killType != KillType.TOB_HM)
-//				{
-//					return;
-//				}
-//
-//				switch (killType)
-//				{
-//					case TOB:
-//						break;
-//					case TOB_SM:
-//						break;
-//					case TOB_HM:
-//						break;
-//					default:
-//						throw new IllegalStateException();
-//				}
-//				killType = null;
-//				killCountNumber = 0;
-//				break;
-//			}
-//			case BARROWS_REWARD_GROUP_ID:
-//			{
-//				if (killType != KillType.BARROWS)
-//				{
-//					return;
-//				}
-//				killType = null;
-//				killCountNumber = 0;
-//				break;
-//			}
-//			case CLUE_SCROLL_REWARD_GROUP_ID:
-//			{
-//				if (clueType == null || clueNumber == null)
-//				{
-//					return;
-//				}
-//
-//				clueType = null;
-//				clueNumber = null;
-//				break;
-//			}
-//			default:
-//				return;
-//		}
-//
-//		sendMessage("", "");
-//	}
-//	@Subscribe
-//	public void onStatChanged(net.runelite.api.events.StatChanged statChanged)
-//	{
-//		String skillName = statChanged.getSkill().getName();
-//		int level = statChanged.getLevel();
-//
-//		// .contains wasn't behaving so I went with == null
-//		if (currentLevels.get(skillName) == null || currentLevels.get(skillName) == 0)
-//		{
-//			currentLevels.put(skillName, level);
-//			return;
-//		}
-//
-//		if (currentLevels.get(skillName) != level)
-//		{
-//			currentLevels.put(skillName, level);
-//
-//			if (level >= config.minLevel())
-//			{
-//				leveledSkills.add(skillName);
-//				sendMessage("", "");
-//			}
-//		}
-//	}
+	private void sendMessage(String itemName, String itemValue, String notificationType)
+	{
+		if (!shouldSendMessage) {return;}
 
-    @Provides
-    BetterDiscordLootLoggerConfig provideConfig(ConfigManager configManager)
-    {
-        return configManager.getConfig(BetterDiscordLootLoggerConfig.class);
-    }
+		switch (notificationType)
+		{
+			case "pet":
+				itemName = "a new pet";
+				break;
+			case "chest":
+				itemName = "**" + itemName + "**";
+				break;
+			case "valuable drop":
+				itemName = " a valuable drop: **" + itemName + "**";
+				break;
+			case "collection log":
+				itemName = " a new collection log item: **" + itemName + "**";
+				break;
+			case "combat task":
+				itemName = " a new combat task achievement: **" + itemName + "**";
+				break;
+			default:
+				itemName = " **a rare drop**";
+				break;
+		}
 
-    private void sendMessage(String itemName, String itemValue, String notificationType)
-    {
-
-//        TODO add in details about the drop
-//          - Item Name
-//          - Item Price (Only if applicable)
-//          - Item Rarity (Only if applicable/able to get it)
-//          - Boss That Dropped Item?
-//          - Add all this info in a nice looking embed similar to the rare drops plugin
-//          - Maybe add icon of item? (need to check if it's possible/how easy it is to get)
-
-        switch (notificationType) {
-            case "pet":
-                itemName = "a new pet: **" + itemName + "**";
-                break;
-            case "chest":
-                itemName = "**" + itemName + "**";
-                break;
-            case "valuable drop":
-                itemName = " a valuable drop: **" + itemName + "**";
-                break;
-            case "collection log":
-                itemName = " a new collection log item: **" + itemName + "**";
-                break;
-            case "combat task":
-                itemName = " a new combat task achievement: **" + itemName + "**";
-                break;
-            default:
-                itemName = "  **" + itemName + "**";
-                break;
-        }
-
-        String screenshotString = "**" + client.getLocalPlayer().getName() + "**";
-        if (!itemName.isEmpty() && !itemValue.isEmpty()) {
-            screenshotString += " just received" + itemName + "! \nApprox Value: **" + itemValue + " coins** \nSay gz or else :angry:";
-        } else if (!itemName.isEmpty() && itemValue.isEmpty()) {
-            screenshotString += " just received" + itemName + "! \nSay gz or else :angry:";
-        } else {
-            screenshotString += " just received a rare drop! \nSay gz or else :angry:";
-        }
+		String screenshotString = "**" + client.getLocalPlayer().getName() + "**";
+		if (!itemValue.isEmpty())
+		{
+			screenshotString += " just received" + itemName + "! \nApprox Value: **" + itemValue + " coins**";
+		}
+		else
+		{
+			screenshotString += " just received" + itemName + "!";
+		}
 
 
-        com.betterdiscordlootlogger.DiscordWebhookBody discordWebhookBody = new com.betterdiscordlootlogger.DiscordWebhookBody();
-        discordWebhookBody.setContent(screenshotString);
-        sendWebhook(discordWebhookBody);
-    }
+		com.betterdiscordlootlogger.DiscordWebhookBody discordWebhookBody = new com.betterdiscordlootlogger.DiscordWebhookBody();
+		discordWebhookBody.setContent(screenshotString);
+		sendWebhook(discordWebhookBody);
+	}
 
-    private void sendWebhook(com.betterdiscordlootlogger.DiscordWebhookBody discordWebhookBody)
-    {
-        String configUrl = config.webhook();
-        if (Strings.isNullOrEmpty(configUrl)) { return; }
+	private void sendWebhook(com.betterdiscordlootlogger.DiscordWebhookBody discordWebhookBody)
+	{
+		String configUrl = config.webhook();
+		if (Strings.isNullOrEmpty(configUrl))
+		{
+			return;
+		}
 
-        HttpUrl url = HttpUrl.parse(configUrl);
-        MultipartBody.Builder requestBodyBuilder = new MultipartBody.Builder()
-                .setType(MultipartBody.FORM)
-                .addFormDataPart("payload_json", GSON.toJson(discordWebhookBody));
+		HttpUrl url = HttpUrl.parse(configUrl);
+		MultipartBody.Builder requestBodyBuilder = new MultipartBody.Builder()
+			.setType(MultipartBody.FORM)
+			.addFormDataPart("payload_json", GSON.toJson(discordWebhookBody));
 
-        if (config.sendScreenshot())
-        {
-            sendWebhookWithScreenshot(url, requestBodyBuilder);
-        }
-        else
-        {
-            buildRequestAndSend(url, requestBodyBuilder);
-        }
-    }
+		if (config.sendScreenshot())
+		{
+			sendWebhookWithScreenshot(url, requestBodyBuilder);
+		}
+		else
+		{
+			buildRequestAndSend(url, requestBodyBuilder);
+		}
+	}
 
-    private void sendWebhookWithScreenshot(HttpUrl url, MultipartBody.Builder requestBodyBuilder)
-    {
-        drawManager.requestNextFrameListener(image ->
-        {
-            BufferedImage bufferedImage = (BufferedImage) image;
-            byte[] imageBytes;
-            try
-            {
-                imageBytes = convertImageToByteArray(bufferedImage);
-            }
-            catch (IOException e)
-            {
-                log.warn("Error converting image to byte array", e);
-                return;
-            }
+	private void sendWebhookWithScreenshot(HttpUrl url, MultipartBody.Builder requestBodyBuilder)
+	{
+		drawManager.requestNextFrameListener(image ->
+		{
+			BufferedImage bufferedImage = (BufferedImage) image;
+			byte[] imageBytes;
+			try
+			{
+				imageBytes = convertImageToByteArray(bufferedImage);
+			}
+			catch (IOException e)
+			{
+				log.warn("Error converting image to byte array", e);
+				return;
+			}
 
-            requestBodyBuilder.addFormDataPart("file", "image.png",
-                    RequestBody.create(MediaType.parse("image/png"), imageBytes));
-            buildRequestAndSend(url, requestBodyBuilder);
-        });
-    }
+			requestBodyBuilder.addFormDataPart("file", "image.png",
+				RequestBody.create(MediaType.parse("image/png"), imageBytes));
+			buildRequestAndSend(url, requestBodyBuilder);
+		});
+	}
 
-    private void buildRequestAndSend(HttpUrl url, MultipartBody.Builder requestBodyBuilder)
-    {
-        RequestBody requestBody = requestBodyBuilder.build();
-        Request request = new Request.Builder()
-                .url(url)
-                .post(requestBody)
-                .build();
-        sendRequest(request);
-    }
+	private void buildRequestAndSend(HttpUrl url, MultipartBody.Builder requestBodyBuilder)
+	{
+		RequestBody requestBody = requestBodyBuilder.build();
+		Request request = new Request.Builder()
+			.url(url)
+			.post(requestBody)
+			.build();
+		sendRequest(request);
+	}
 
-    private void sendRequest(Request request)
-    {
-        okHttpClient.newCall(request).enqueue(new Callback()
-        {
-            @Override
-            public void onFailure(Call call, IOException e)
-            {
-                log.debug("Error submitting webhook", e);
-            }
+	private void sendRequest(Request request)
+	{
+		okHttpClient.newCall(request).enqueue(new Callback()
+		{
+			@Override
+			public void onFailure(Call call, IOException e)
+			{
+				log.debug("Error submitting webhook", e);
+			}
 
-            @Override
-            public void onResponse(Call call, Response response) throws IOException
-            {
-                response.close();
-            }
-        });
-    }
+			@Override
+			public void onResponse(Call call, Response response) throws IOException
+			{
+				response.close();
+			}
+		});
+	}
 
-    private static byte[] convertImageToByteArray(BufferedImage bufferedImage) throws IOException
-    {
-        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-        ImageIO.write(bufferedImage, "png", byteArrayOutputStream);
-        return byteArrayOutputStream.toByteArray();
-    }
+	private static byte[] convertImageToByteArray(BufferedImage bufferedImage) throws IOException
+	{
+		ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+		ImageIO.write(bufferedImage, "png", byteArrayOutputStream);
+		return byteArrayOutputStream.toByteArray();
+	}
 
-    private void resetState()
-    {
-        shouldSendMessage = false;
-        ticksWaited = 0;
-    }
-
-    private boolean isInsideGauntlet()
-    {
-        return this.client.isInInstancedRegion()
-                && this.client.getMapRegions().length > 0
-                && (this.client.getMapRegions()[0] == GAUNTLET_REGION
-                || this.client.getMapRegions()[0] == CORRUPTED_GAUNTLET_REGION);
-    }
-
-    @VisibleForTesting
-    int getClueNumber()
-    {
-        return clueNumber;
-    }
-
-    @VisibleForTesting
-    String getClueType()
-    {
-        return clueType;
-    }
-
-    @VisibleForTesting
-    KillType getKillType()
-    {
-        return killType;
-    }
-
-    @VisibleForTesting
-    int getKillCountNumber()
-    {
-        return killCountNumber;
-    }
+	private void resetState()
+	{
+		shouldSendMessage = false;
+	}
 }
