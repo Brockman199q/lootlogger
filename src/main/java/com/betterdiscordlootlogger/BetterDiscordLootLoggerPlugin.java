@@ -29,6 +29,7 @@ import javax.inject.Inject;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.lang.reflect.Array;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -37,7 +38,7 @@ import static net.runelite.http.api.RuneLiteAPI.GSON;
 
 @Slf4j
 @PluginDescriptor(
-        name = "Discord Unique Notifications"
+        name = "Better Discord Loot Logger"
 )
 public class BetterDiscordLootLoggerPlugin extends Plugin
 {
@@ -46,18 +47,14 @@ public class BetterDiscordLootLoggerPlugin extends Plugin
     private static final Map<Integer, String> CHEST_LOOT_EVENTS = ImmutableMap.of(12127, "The Gauntlet");
     private static final int GAUNTLET_REGION = 7512;
     private static final int CORRUPTED_GAUNTLET_REGION = 7768;
+
     private static final Pattern NUMBER_PATTERN = Pattern.compile("([0-9]+)");
     private static final Pattern VALUABLE_DROP_PATTERN = Pattern.compile(".*Valuable drop: ([^<>]+?\\(((?:\\d+,?)+) coins\\))(?:</col>)?");
-    //	private static final Pattern COMBAT_ACHIEVEMENTS_PATTERN = Pattern.compile("Congratulations, you've completed an? (?<tier>\\w+) combat task: <col=[0-9a-f]+>(?<task>(.+))</col>\\.");
+
+    private static final Pattern COMBAT_ACHIEVEMENTS_PATTERN = Pattern.compile("Congratulations, you've completed an? (?<tier>\\w+) combat task: <col=[0-9a-f]+>(?<task>(.+))</col>\\.");
     private static final ImmutableList<String> PET_MESSAGES = ImmutableList.of("You have a funny feeling like you're being followed",
             "You feel something weird sneaking into your backpack",
             "You have a funny feeling like you would have been followed");
-    private static final String SD_CLUE_SCROLL_REWARDS = "Clue Scroll Rewards";
-    private static final String SD_PETS = "Pets";
-    private static final String SD_CHEST_LOOT = "Chest Loot";
-    private static final String SD_VALUABLE_DROPS = "Valuable Drops";
-    private static final String SD_COLLECTION_LOG = "Collection Log";
-    private static final String SD_COMBAT_ACHIEVEMENTS = "Combat Achievements";
 
     private String clueType;
     private Integer clueNumber;
@@ -97,7 +94,7 @@ public class BetterDiscordLootLoggerPlugin extends Plugin
         @Override
         public void hotkeyPressed()
         {
-            shouldSendMessage = true;
+            sendMessage("", "", "");
         }
     };
 
@@ -128,24 +125,24 @@ public class BetterDiscordLootLoggerPlugin extends Plugin
         }
     }
 
-    @Subscribe
-    public void onGameTick(GameTick event)
-    {
-        if (!shouldSendMessage)
-        {
-            return;
-        }
-
-        if (ticksWaited < 2)
-        {
-            ticksWaited++;
-            return;
-        }
-
-        shouldSendMessage = false;
-        ticksWaited = 0;
-        sendMessage();
-    }
+//    @Subscribe
+//    public void onGameTick(GameTick event)
+//    {
+//        if (!shouldSendMessage)
+//        {
+//            return;
+//        }
+//
+//        if (ticksWaited < 2)
+//        {
+//            ticksWaited++;
+//            return;
+//        }
+//
+//        shouldSendMessage = false;
+//        ticksWaited = 0;
+//        sendMessage("", "");
+//    }
 
     @Subscribe
     public void onChatMessage(ChatMessage event)
@@ -160,64 +157,64 @@ public class BetterDiscordLootLoggerPlugin extends Plugin
 
         String chatMessage = event.getMessage();
 
-        if (chatMessage.contains("You have completed") && chatMessage.contains("Treasure"))
-        {
-            Matcher m = NUMBER_PATTERN.matcher(Text.removeTags(chatMessage));
-            if (m.find())
-            {
-                clueNumber = Integer.valueOf(m.group());
-                clueType = chatMessage.substring(chatMessage.lastIndexOf(m.group()) + m.group().length() + 1, chatMessage.indexOf("Treasure") - 1);
-                return;
-            }
-        }
-
-        if (chatMessage.startsWith("Your Barrows chest count is"))
-        {
-            Matcher m = NUMBER_PATTERN.matcher(Text.removeTags(chatMessage));
-            if (m.find())
-            {
-                killType = KillType.BARROWS;
-                killCountNumber = Integer.valueOf(m.group());
-                return;
-            }
-        }
-
-        if (chatMessage.startsWith("Your completed Chambers of Xeric count is:"))
-        {
-            Matcher m = NUMBER_PATTERN.matcher(Text.removeTags(chatMessage));
-            if (m.find())
-            {
-                killType = KillType.COX;
-                killCountNumber = Integer.valueOf(m.group());
-                return;
-            }
-        }
-
-        if (chatMessage.startsWith("Your completed Chambers of Xeric Challenge Mode count is:"))
-        {
-            Matcher m = NUMBER_PATTERN.matcher(Text.removeTags(chatMessage));
-            if (m.find())
-            {
-                killType = KillType.COX_CM;
-                killCountNumber = Integer.valueOf(m.group());
-                return;
-            }
-        }
-
-        if (chatMessage.startsWith("Your completed Theatre of Blood"))
-        {
-            Matcher m = NUMBER_PATTERN.matcher(Text.removeTags(chatMessage));
-            if (m.find())
-            {
-                killType = chatMessage.contains("Hard Mode") ? KillType.TOB_HM : (chatMessage.contains("Story Mode") ? KillType.TOB_SM : KillType.TOB);
-                killCountNumber = Integer.valueOf(m.group());
-                return;
-            }
-        }
+//        if (chatMessage.contains("You have completed") && chatMessage.contains("Treasure"))
+//        {
+//            Matcher m = NUMBER_PATTERN.matcher(Text.removeTags(chatMessage));
+//            if (m.find())
+//            {
+//                clueNumber = Integer.valueOf(m.group());
+//                clueType = chatMessage.substring(chatMessage.lastIndexOf(m.group()) + m.group().length() + 1, chatMessage.indexOf("Treasure") - 1);
+//                return;
+//            }
+//        }
+//
+//        if (chatMessage.startsWith("Your Barrows chest count is"))
+//        {
+//            Matcher m = NUMBER_PATTERN.matcher(Text.removeTags(chatMessage));
+//            if (m.find())
+//            {
+//                killType = KillType.BARROWS;
+//                killCountNumber = Integer.valueOf(m.group());
+//                return;
+//            }
+//        }
+//
+//        if (chatMessage.startsWith("Your completed Chambers of Xeric count is:"))
+//        {
+//            Matcher m = NUMBER_PATTERN.matcher(Text.removeTags(chatMessage));
+//            if (m.find())
+//            {
+//                killType = KillType.COX;
+//                killCountNumber = Integer.valueOf(m.group());
+//                return;
+//            }
+//        }
+//
+//        if (chatMessage.startsWith("Your completed Chambers of Xeric Challenge Mode count is:"))
+//        {
+//            Matcher m = NUMBER_PATTERN.matcher(Text.removeTags(chatMessage));
+//            if (m.find())
+//            {
+//                killType = KillType.COX_CM;
+//                killCountNumber = Integer.valueOf(m.group());
+//                return;
+//            }
+//        }
+//
+//        if (chatMessage.startsWith("Your completed Theatre of Blood"))
+//        {
+//            Matcher m = NUMBER_PATTERN.matcher(Text.removeTags(chatMessage));
+//            if (m.find())
+//            {
+//                killType = chatMessage.contains("Hard Mode") ? KillType.TOB_HM : (chatMessage.contains("Story Mode") ? KillType.TOB_SM : KillType.TOB);
+//                killCountNumber = Integer.valueOf(m.group());
+//                return;
+//            }
+//        }
 
         if (config.screenshotPet() && PET_MESSAGES.stream().anyMatch(chatMessage::contains))
         {
-            shouldSendMessage = true;
+            sendMessage("", "", "pet");
         }
 
         if (chatMessage.equals(CHEST_LOOTED_MESSAGE) && config.screenshotRewards())
@@ -226,7 +223,7 @@ public class BetterDiscordLootLoggerPlugin extends Plugin
             String eventName = CHEST_LOOT_EVENTS.get(regionID);
             if (eventName != null)
             {
-                shouldSendMessage = true;
+                sendMessage("", "", "chest");
             }
         }
 
@@ -238,18 +235,22 @@ public class BetterDiscordLootLoggerPlugin extends Plugin
                 int valuableDropValue = Integer.parseInt(m.group(2).replaceAll(",", ""));
                 if (valuableDropValue >= config.valuableDropThreshold())
                 {
-//					String valuableDropName = m.group(1);
-//					String fileName = "Valuable drop " + valuableDropName;
-                    shouldSendMessage = true;
+                    String valuableDrop[] = m.group(1).split(" \\(");
+					String valuableDropName = (String)Array.get(valuableDrop, 0);
+					String valuableDropValueString = m.group(2);
+                    sendMessage(valuableDropName, valuableDropValueString, "valuable drop");
                 }
             }
         }
 
+//        FIXME
+//          - Figure out why Varbits.COLLECTION_LOG_NOTIFICATION is throwing an error.
+//          - Same for Varbits.COMBAT_ACHIEVEMENTS_POPUP
+
         if (config.screenshotCollectionLogEntries() && chatMessage.startsWith(COLLECTION_LOG_TEXT) && (client.getVarbitValue(Varbits.COLLECTION_LOG_NOTIFICATION) == 1 || client.getVarbitValue(Varbits.COLLECTION_LOG_NOTIFICATION) == 3))
         {
-//			String entry = Text.removeTags(chatMessage).substring(COLLECTION_LOG_TEXT.length());
-//			String fileName = "Collection log (" + entry + ")";
-            shouldSendMessage = true;
+			String entry = Text.removeTags(chatMessage).substring(COLLECTION_LOG_TEXT.length());
+            sendMessage(entry, "", "collection log");
         }
 
         if (chatMessage.contains("combat task") && config.screenshotCombatAchievements() && client.getVarbitValue(Varbits.COMBAT_ACHIEVEMENTS_POPUP) == 1)
@@ -257,7 +258,7 @@ public class BetterDiscordLootLoggerPlugin extends Plugin
 //			String fileName = parseCombatAchievementWidget(chatMessage);
 //			if (!fileName.isEmpty())
 //			{
-            shouldSendMessage = true;
+            sendMessage("", "", "combat task");
 //			}
         }
     }
@@ -346,7 +347,7 @@ public class BetterDiscordLootLoggerPlugin extends Plugin
 //				return;
 //		}
 //
-//		shouldSendMessage = true;
+//		sendMessage("", "");
 //	}
 //	@Subscribe
 //	public void onStatChanged(net.runelite.api.events.StatChanged statChanged)
@@ -368,7 +369,7 @@ public class BetterDiscordLootLoggerPlugin extends Plugin
 //			if (level >= config.minLevel())
 //			{
 //				leveledSkills.add(skillName);
-//				shouldSendMessage = true;
+//				sendMessage("", "");
 //			}
 //		}
 //	}
@@ -379,10 +380,47 @@ public class BetterDiscordLootLoggerPlugin extends Plugin
         return configManager.getConfig(BetterDiscordLootLoggerConfig.class);
     }
 
-    private void sendMessage()
+    private void sendMessage(String itemName, String itemValue, String notificationType)
     {
-        String screenshotString = client.getLocalPlayer().getName() + " just received a rare drop! Say gz or else :)";
-        screenshotString += " just recieved a rare drop! Say gz or else :)";
+
+//        TODO add in details about the drop
+//          - Item Name
+//          - Item Price (Only if applicable)
+//          - Item Rarity (Only if applicable/able to get it)
+//          - Boss That Dropped Item?
+//          - Add all this info in a nice looking embed similar to the rare drops plugin
+//          - Maybe add icon of item? (need to check if it's possible/how easy it is to get)
+
+        switch (notificationType) {
+            case "pet":
+                itemName = "a new pet: **" + itemName + "**";
+                break;
+            case "chest":
+                itemName = "**" + itemName + "**";
+                break;
+            case "valuable drop":
+                itemName = " a valuable drop: **" + itemName + "**";
+                break;
+            case "collection log":
+                itemName = " a new collection log item: **" + itemName + "**";
+                break;
+            case "combat task":
+                itemName = " a new combat task achievement: **" + itemName + "**";
+                break;
+            default:
+                itemName = "  **" + itemName + "**";
+                break;
+        }
+
+        String screenshotString = "**" + client.getLocalPlayer().getName() + "**";
+        if (!itemName.isEmpty() && !itemValue.isEmpty()) {
+            screenshotString += " just received" + itemName + "! \nApprox Value: **" + itemValue + " coins** \nSay gz or else :angry:";
+        } else if (!itemName.isEmpty() && itemValue.isEmpty()) {
+            screenshotString += " just received" + itemName + "! \nSay gz or else :angry:";
+        } else {
+            screenshotString += " just received a rare drop! \nSay gz or else :angry:";
+        }
+
 
         com.betterdiscordlootlogger.DiscordWebhookBody discordWebhookBody = new com.betterdiscordlootlogger.DiscordWebhookBody();
         discordWebhookBody.setContent(screenshotString);
