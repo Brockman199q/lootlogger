@@ -229,9 +229,10 @@ public class BetterDiscordLootLoggerPlugin extends Plugin
 				final String lootRecipient = Text.sanitize(uniqueMessage.group(1)).trim();
 				final String dropName = uniqueMessage.group(2).trim();
 
-				if (lootRecipient.equalsIgnoreCase(Text.sanitize(Objects.requireNonNull(client.getLocalPlayer().getName()))))
+				if (lootRecipient.equals(Text.sanitize(Objects.requireNonNull(client.getLocalPlayer().getName()))))
 				{
 					raidItemName = dropName;
+					sendMessage(raidItemName, raidKc, "Theatre of Blood", "", "raid loot");
 				}
 			}
 			if (chatMessage.startsWith(COX_DUST_MESSAGE_TEXT))
@@ -239,7 +240,7 @@ public class BetterDiscordLootLoggerPlugin extends Plugin
 				final String dustRecipient = Text.removeTags(chatMessage).substring(COX_DUST_MESSAGE_TEXT.length());
 				final String dropName = "Metamorphic dust";
 
-				if (dustRecipient.equalsIgnoreCase(Text.sanitize(Objects.requireNonNull(client.getLocalPlayer().getName()))))
+				if (dustRecipient.equals(Text.sanitize(Objects.requireNonNull(client.getLocalPlayer().getName()))))
 				{
 					raidItemName = dropName;
 				}
@@ -249,7 +250,7 @@ public class BetterDiscordLootLoggerPlugin extends Plugin
 				final String dustRecipient = Text.removeTags(chatMessage).substring(COX_KIT_MESSAGE_TEXT.length());
 				final String dropName = "Twisted ancestral colour kit";
 
-				if (dustRecipient.equalsIgnoreCase(Text.sanitize(Objects.requireNonNull(client.getLocalPlayer().getName()))))
+				if (dustRecipient.equals(Text.sanitize(Objects.requireNonNull(client.getLocalPlayer().getName()))))
 				{
 					raidItemName = dropName;
 				}
@@ -261,7 +262,7 @@ public class BetterDiscordLootLoggerPlugin extends Plugin
 				final String lootRecipient = Text.sanitize(tobUniqueMessage.group(1)).trim();
 				final String dropName = tobUniqueMessage.group(2).trim();
 
-				if (lootRecipient.equalsIgnoreCase(Text.sanitize(Objects.requireNonNull(client.getLocalPlayer().getName()))))
+				if (lootRecipient.equals(Text.sanitize(Objects.requireNonNull(client.getLocalPlayer().getName()))))
 				{
 					raidItemName = dropName;
 				}
