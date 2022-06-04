@@ -110,6 +110,18 @@ public interface BetterDiscordLootLoggerConfig extends Config
         return true;
     }
 
+	@ConfigItem(
+		keyName = "raidLoot",
+		name = "Include raid loot (Experimental)",
+		description = "Configures whether a message will be automatically sent to discord when you obtain a raid unique.",
+		position = 8,
+		section = whatToSendSection
+	)
+	default boolean includeRaidLoot()
+	{
+		return true;
+	}
+
     @ConfigItem(
             keyName = "webhook",
             name = "Discord Webhook",
