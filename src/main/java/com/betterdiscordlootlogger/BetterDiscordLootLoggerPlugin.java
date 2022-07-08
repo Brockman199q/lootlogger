@@ -41,6 +41,7 @@ import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.ScriptID;
+import net.runelite.api.VarClientInt;
 import net.runelite.api.VarClientStr;
 import net.runelite.api.Varbits;
 import net.runelite.api.events.ChatMessage;
@@ -335,8 +336,8 @@ public class BetterDiscordLootLoggerPlugin extends Plugin
 				{
 					return;
 				}
-				String notificationTopText = client.getVar(VarClientStr.NOTIFICATION_TOP_TEXT);
-				String notificationBottomText = client.getVar(VarClientStr.NOTIFICATION_BOTTOM_TEXT);
+				String notificationTopText = client.getVarcStrValue(VarClientStr.NOTIFICATION_TOP_TEXT);
+				String notificationBottomText = client.getVarcStrValue(VarClientStr.NOTIFICATION_BOTTOM_TEXT);
 				if (notificationTopText.equalsIgnoreCase("Collection log") && config.includeCollectionLogItems())
 				{
 					String entry = Text.removeTags(notificationBottomText).substring("New item:".length());
