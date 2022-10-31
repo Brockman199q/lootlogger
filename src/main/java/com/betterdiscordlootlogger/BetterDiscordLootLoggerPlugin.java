@@ -360,7 +360,7 @@ public class BetterDiscordLootLoggerPlugin extends Plugin
 		switch (notificationType)
 		{
 			case "pet":
-				itemName = "a new pet!";
+				itemName = " a new pet!";
 				break;
 			case "valuable drop":
 				itemName = " a valuable drop: **" + itemName + "**!";
