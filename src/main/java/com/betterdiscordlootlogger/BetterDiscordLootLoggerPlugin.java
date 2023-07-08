@@ -31,6 +31,8 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.lang.reflect.Array;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -404,18 +406,20 @@ public class BetterDiscordLootLoggerPlugin extends Plugin
 			return;
 		}
 
-		HttpUrl url = HttpUrl.parse(configUrl);
+		ArrayList<String> urls = new ArrayList<>(Arrays.asList(configUrl.split("\\s*,\\s*")));
 		MultipartBody.Builder requestBodyBuilder = new MultipartBody.Builder()
-			.setType(MultipartBody.FORM)
-			.addFormDataPart("payload_json", GSON.toJson(discordWebhookBody));
+				.setType(MultipartBody.FORM)
+				.addFormDataPart("payload_json", GSON.toJson(discordWebhookBody));
 
-		if (config.sendScreenshot())
-		{
-			sendWebhookWithScreenshot(url, requestBodyBuilder);
-		}
-		else
-		{
-			buildRequestAndSend(url, requestBodyBuilder);
+		for (String url : urls) {
+			HttpUrl httpUrl = HttpUrl.parse(url);
+			if (httpUrl != null) {
+				if (config.sendScreenshot()) {
+					sendWebhookWithScreenshot(httpUrl, requestBodyBuilder);
+				} else {
+					buildRequestAndSend(httpUrl, requestBodyBuilder);
+				}
+			}
 		}
 	}
 
