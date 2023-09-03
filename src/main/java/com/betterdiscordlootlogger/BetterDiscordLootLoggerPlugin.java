@@ -79,6 +79,7 @@ public class BetterDiscordLootLoggerPlugin extends Plugin
 {
 	private static final String COLLECTION_LOG_TEXT = "New item added to your collection log: ";
 	private static final Pattern VALUABLE_DROP_PATTERN = Pattern.compile(".*Valuable drop: ([^<>]+?\\(((?:\\d+,?)+) coins\\))(?:</col>)?");
+	private static final Pattern VALUABLE_CHEST_DROP_PATTERN = Pattern.compile(".*Your chest is worth around ([^<>]+?\\(((?:\\d+,?)+) coins\\))(?:</col>)?");
 	private static final ImmutableList<String> PET_MESSAGES = ImmutableList.of("You have a funny feeling like you're being followed",
 		"You feel something weird sneaking into your backpack",
 		"You have a funny feeling like you would have been followed");
@@ -182,6 +183,12 @@ public class BetterDiscordLootLoggerPlugin extends Plugin
 		if (config.includeValuableDrops())
 		{
 			Matcher matcher = VALUABLE_DROP_PATTERN.matcher(chatMessage);
+
+			//If it does not match the valuable drop pattern then try the valuable chest drop pattern (Barrows chests)
+			if (!matcher.matches()) {
+				matcher = VALUABLE_CHEST_DROP_PATTERN.matcher(chatMessage);
+			}
+
 			if (matcher.matches())
 			{
 				int valuableDropValue = Integer.parseInt(matcher.group(2).replaceAll(",", ""));
